@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>우리집 1년 가계부</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 기본 스타일 */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f6; color: #333; padding: 20px; }
+        
+        /* 상단 헤더 영역 */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        .header-left { display: flex; align-items: center; gap: 15px; }
+        h1 { font-size: 24px; color: #2c3e50; }
+        .year-input { font-size: 18px; padding: 5px; width: 80px; text-align: center; font-weight: bold; border: 1px solid #ccc; border-radius: 4px; }
+        .save-status { font-size: 14px; color: #27ae60; font-weight: bold; opacity: 0; transition: opacity 0.3s; }
+        .save-status.show { opacity: 1; }
+        
+        /* 버튼 스타일 */
+        button { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+        button:hover { opacity: 0.8; }
+        .btn-setting { background-color: #8e44ad; } /* 설정 버튼 보라색 */
+        .btn-sample { background-color: #3498db; }
+        .btn-reset { background-color: #e74c3c; }
+        .btn-small { padding: 4px 8px; font-size: 12px; margin-left: 5px; }
+        .btn-add { background-color: #2ecc71; width: 100%; margin-top: 10px; padding: 10px; font-size: 14px; }
+
+        /* 그래프 및 레이아웃 */
+        .chart-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; height: 300px; }
+        .main-container { display: grid; grid-template-columns: 3fr 1fr; gap: 20px; }
+        @media (max-width: 1024px) { .main-container { grid-template-columns: 1fr; } }
+
+        /* 표 영역 */
+        .tables-section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+        .table-wrapper { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); overflow-x: auto; }
+        h2 { font-size: 18px; margin-bottom: 10px; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+        th, td { border: 1px solid #e0e0e0; padding: 8px; text-align: center; font-size: 14px; }
+        th { background-color: #f8f9fa; font-weight: bold; }
+        td:first-child { background-color: #f8f9fa; font-weight: bold; position: sticky; left: 0; z-index: 1; }
+        input[type="text"] { width: 90px; padding: 5px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-family: inherit; }
+        input[type="text"]:focus { outline: none; border-color: #3498db; background-color: #e8f4f8; }
+        
+        /* 요약 영역 */
+        .summary-section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: fit-content; }
+        .summary-box { margin-bottom: 20px; }
+        .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
+        .summary-row.total { font-weight: bold; font-size: 16px; color: #2c3e50; border-bottom: 2px solid #ccc; }
+        .text-blue { color: #2980b9; font-weight: bold; }
+        .text-red { color: #c0392b; font-weight: bold; }
+        .readonly-cell { background-color: #f1f2f6; text-align: right; padding-right: 10px; font-weight: bold; }
+
+        /* 모달(팝업창) 스타일 */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 400px; max-width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .modal-close { background: none; color: #333; font-size: 20px; padding: 0; }
+        .cat-list { margin-bottom: 20px; }
+        .cat-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
+        .cat-item-name { font-size: 15px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="header-left">
+            <h1>우리집 1년 가계부</h1>
+            <input type="number" id="yearInput" class="year-input" value="2024">
+            <span id="saveStatus" class="save-status">✅ 자동 저장됨</span>
+        </div>
+        <div class="btn-group">
+            <button class="btn-setting" onclick="openModal()">⚙️ 카테고리 설정</button>
+            <button class="btn-sample" onclick="loadSampleData()">샘플 데이터</button>
+            <button class="btn-reset" onclick="resetData()">전체 초기화</button>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="financeChart"></canvas>
+    </div>
+
+    <div class="main-container">
+        <div class="tables-section">
+            <div class="table-wrapper">
+                <h2>💰 수입 입력</h2>
+                <table id="incomeTable"></table>
+            </div>
+            <div class="table-wrapper">
+                <h2>💳 지출 입력</h2>
+                <table id="expenseTable"></table>
+            </div>
+            <div class="table-wrapper">
+                <h2>📊 월별 요약</h2>
+                <table id="monthlySummaryTable"></table>
+            </div>
+        </div>
+
+        <div class="summary-section">
+            <div class="summary-box">
+                <h2>🏆 연간 총 요약</h2>
+                <div class="summary-row total"><span>연간 총수입</span><span id="yearTotalIncome" class="text-blue">0원</span></div>
+                <div class="summary-row total"><span>연간 총지출</span><span id="yearTotalExpense" class="text-red">0원</span></div>
+                <div class="summary-row total"><span>연간 총차액</span><span id="yearTotalDiff">0원</span></div>
+                <div class="summary-row"><span>월평균 지출</span><span id="yearAvgExpense">0원</span></div>
+            </div>
+            <div class="summary-box">
+                <h2>📂 카테고리별 연간 합계</h2>
+                <div id="categorySummary"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 카테고리 설정 모달창 -->
+    <div id="categoryModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ 카테고리 설정</h2>
+                <button class="modal-close" onclick="closeModal()">✖</button>
+            </div>
+            
+            <h3>💰 수입 카테고리</h3>
+            <div id="incomeCatList" class="cat-list"></div>
+            <button class="btn-add" onclick="addCategory('income')">+ 수입 항목 추가</button>
+            
+            <h3 style="margin-top: 20px;">💳 지출 카테고리</h3>
+            <div id="expenseCatList" class="cat-list"></div>
+            <button class="btn-add" onclick="addCategory('expense')">+ 지출 항목 추가</button>
+        </div>
+    </div>
+
+    <script>
+        const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        
+        // [수정됨] 카테고리 목록도 데이터 객체 안으로 들어왔습니다!
+        let appData = {
+            year: new Date().getFullYear(),
+            incomeCategories: ['아빠 월급', '엄마 월급', '기타 수입'],
+            expenseCategories: ['카드 1', '현금 사용', '기타 지출'],
+            income: {},
+            expense: {}
+        };
+
+        let myChart = null;
+
+        function init() {
+            const savedData = localStorage.getItem('familyLedger');
+            if (savedData) {
+                const parsed = JSON.parse(savedData);
+                appData.year = parsed.year || appData.year;
+                // 저장된 카테고리가 있으면 불러오기
+                if(parsed.incomeCategories) appData.incomeCategories = parsed.incomeCategories;
+                if(parsed.expenseCategories) appData.expenseCategories = parsed.expenseCategories;
+                
+                document.getElementById('yearInput').value = appData.year;
+                
+                if(parsed.income) appData.income = parsed.income;
+                if(parsed.expense) appData.expense = parsed.expense;
+            }
+
+            // 카테고리에 맞는 데이터 배열(12달)이 없으면 생성
+            appData.incomeCategories.forEach(cat => { if(!appData.income[cat]) appData.income[cat] = Array(12).fill(0); });
+            appData.expenseCategories.forEach(cat => { if(!appData.expense[cat]) appData.expense[cat] = Array(12).fill(0); });
+
+            renderTables();
+            initChart(); 
+            updateCalculations(); 
+
+            document.getElementById('yearInput').addEventListener('change', function(e) {
+                appData.year = e.target.value;
+                saveData();
+            });
+        }
+
+        function saveData() {
+            localStorage.setItem('familyLedger', JSON.stringify(appData));
+            showSaveStatus();
+        }
+
+        function showSaveStatus() {
+            const status = document.getElementById('saveStatus');
+            status.classList.add('show');
+            setTimeout(() => status.classList.remove('show'), 1500);
+        }
+
+        // --- 카테고리 관리 기능 ---
+        function openModal() {
+            document.getElementById('categoryModal').style.display = 'flex';
+            renderModalCategories();
+        }
+
+        function closeModal() {
+            document.getElementById('categoryModal').style.display = 'none';
+        }
+
+        function renderModalCategories() {
+            const renderList = (type, categories) => {
+                let html = '';
+                categories.forEach(cat => {
+                    html += `
+                        <div class="cat-item">
+                            <span class="cat-item-name">${cat}</span>
+                            <div>
+                                <button class="btn-sample btn-small" onclick="editCategory('${type}', '${cat}')">수정</button>
+                                <button class="btn-reset btn-small" onclick="deleteCategory('${type}', '${cat}')">삭제</button>
+                            </div>
+                        </div>`;
+                });
+                return html;
+            };
+            document.getElementById('incomeCatList').innerHTML = renderList('income', appData.incomeCategories);
+            document.getElementById('expenseCatList').innerHTML = renderList('expense', appData.expenseCategories);
+        }
+
+        function addCategory(type) {
+            const newName = prompt("새로운 항목 이름을 입력하세요:");
+            if (!newName || newName.trim() === "") return;
+            
+            const catArray = type === 'income' ? appData.incomeCategories : appData.expenseCategories;
+            if (catArray.includes(newName)) {
+                alert("이미 존재하는 이름입니다.");
+                return;
+            }
+
+            catArray.push(newName);
+            appData[type][newName] = Array(12).fill(0); // 새 항목 데이터 0으로 초기화
+            
+            updateAfterCategoryChange();
+        }
+
+        function editCategory(type, oldName) {
+            const newName = prompt(`'${oldName}'의 새 이름을 입력하세요:`, oldName);
+            if (!newName || newName.trim() === "" || newName === oldName) return;
+
+            const catArray = type === 'income' ? appData.incomeCategories : appData.expenseCategories;
+            if (catArray.includes(newName)) {
+                alert("이미 존재하는 이름입니다.");
+                return;
+            }
+
+            // 배열에서 이름 변경
+            const index = catArray.indexOf(oldName);
+            catArray[index] = newName;
+
+            // 데이터 객체에서 키(key) 이름 변경 (기존 데이터 복사 후 삭제)
+            appData[type][newName] = appData[type][oldName];
+            delete appData[type][oldName];
+
+            updateAfterCategoryChange();
+        }
+
+        function deleteCategory(type, name) {
+            if(confirm(`'${name}' 항목을 정말 삭제하시겠습니까?\n(입력된 데이터도 함께 삭제됩니다!)`)) {
+                const catArray = type === 'income' ? appData.incomeCategories : appData.expenseCategories;
+                
+                // 배열에서 제거
+                const index = catArray.indexOf(name);
+                if (index > -1) catArray.splice(index, 1);
+
+                // 데이터 객체에서 제거
+                delete appData[type][name];
+
+                updateAfterCategoryChange();
+            }
+        }
+
+        function updateAfterCategoryChange() {
+            saveData();
+            renderModalCategories(); // 모달창 새로고침
+            renderTables();          // 메인 표 새로고침
+            updateCalculations();    // 계산 새로고침
+        }
+
+        // --- UI 렌더링 (표 그리기) ---
+        function renderTables() {
+            const createHeader = () => `<tr><th>구분</th>${months.map(m => `<th>${m}월</th>`).join('')}</tr>`;
+            
+            let incomeHtml = createHeader();
+            appData.incomeCategories.forEach(cat => {
+                incomeHtml += `<tr><td>${cat}</td>`;
+                months.forEach((m, i) => {
+                    incomeHtml += `<td><input type="text" data-type="income" data-cat="${cat}" data-idx="${i}" value="${formatNum(appData.income[cat][i])}"></td>`;
+                });
+                incomeHtml += `</tr>`;
+            });
+            document.getElementById('incomeTable').innerHTML = incomeHtml;
+
+            let expenseHtml = createHeader();
+            appData.expenseCategories.forEach(cat => {
+                expenseHtml += `<tr><td>${cat}</td>`;
+                months.forEach((m, i) => {
+                    expenseHtml += `<td><input type="text" data-type="expense" data-cat="${cat}" data-idx="${i}" value="${formatNum(appData.expense[cat][i])}"></td>`;
+                });
+                expenseHtml += `</tr>`;
+            });
+            document.getElementById('expenseTable').innerHTML = expenseHtml;
+
+            document.querySelectorAll('input[type="text"]').forEach(input => {
+                input.addEventListener('focus', function(e) {
+                    if (e.target.value === '0') e.target.value = '';
+                    else e.target.value = e.target.value.replace(/,/g, '');
+                });
+                input.addEventListener('input', function(e) {
+                    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+                });
+                input.addEventListener('blur', function(e) {
+                    let val = e.target.value;
+                    if (val === '') val = '0';
+                    
+                    const num = parseInt(val, 10);
+                    e.target.value = formatNum(num);
+
+                    const type = e.target.dataset.type;
+                    const cat = e.target.dataset.cat;
+                    const idx = e.target.dataset.idx;
+                    
+                    if (appData[type][cat][idx] !== num) {
+                        appData[type][cat][idx] = num;
+                        saveData();
+                        updateCalculations();
+                    }
+                });
+            });
+        }
+
+        // --- 계산 및 요약 업데이트 ---
+        function updateCalculations() {
+            let monthlyIncome = Array(12).fill(0);
+            let monthlyExpense = Array(12).fill(0);
+            let monthlyDiff = Array(12).fill(0);
+            let totalIncome = 0;
+            let totalExpense = 0;
+
+            months.forEach((m, i) => {
+                appData.incomeCategories.forEach(cat => monthlyIncome[i] += appData.income[cat][i]);
+                appData.expenseCategories.forEach(cat => monthlyExpense[i] += appData.expense[cat][i]);
+                monthlyDiff[i] = monthlyIncome[i] - monthlyExpense[i];
+                
+                totalIncome += monthlyIncome[i];
+                totalExpense += monthlyExpense[i];
+            });
+
+            const avgExpense = totalExpense / 12;
+
+            let summaryHtml = `<tr><th>구분</th>${months.map(m => `<th>${m}월</th>`).join('')}</tr>`;
+            summaryHtml += `<tr><td>총수입</td>${monthlyIncome.map(v => `<td class="readonly-cell text-blue">${formatNum(v)}</td>`).join('')}</tr>`;
+            summaryHtml += `<tr><td>총지출</td>${monthlyExpense.map(v => `<td class="readonly-cell text-red">${formatNum(v)}</td>`).join('')}</tr>`;
+            summaryHtml += `<tr><td>차액</td>${monthlyDiff.map(v => `<td class="readonly-cell" style="color:${v>=0?'#27ae60':'#c0392b'}">${formatNum(v)}</td>`).join('')}</tr>`;
+            
+            document.getElementById('monthlySummaryTable').innerHTML = summaryHtml;
+
+            document.getElementById('yearTotalIncome').innerText = formatNum(totalIncome) + '원';
+            document.getElementById('yearTotalExpense').innerText = formatNum(totalExpense) + '원';
+            document.getElementById('yearTotalDiff').innerText = formatNum(totalIncome - totalExpense) + '원';
+            document.getElementById('yearTotalDiff').style.color = (totalIncome - totalExpense) >= 0 ? '#27ae60' : '#c0392b';
+            document.getElementById('yearAvgExpense').innerText = formatNum(Math.round(avgExpense)) + '원';
+
+            let catSummaryHtml = '<strong>[수입]</strong><br>';
+            appData.incomeCategories.forEach(cat => {
+                const sum = appData.income[cat].reduce((a, b) => a + b, 0);
+                catSummaryHtml += `<div class="summary-row"><span>${cat}</span><span>${formatNum(sum)}원</span></div>`;
+            });
+            catSummaryHtml += '<br><strong>[지출]</strong><br>';
+            appData.expenseCategories.forEach(cat => {
+                const sum = appData.expense[cat].reduce((a, b) => a + b, 0);
+                catSummaryHtml += `<div class="summary-row"><span>${cat}</span><span>${formatNum(sum)}원</span></div>`;
+            });
+            document.getElementById('categorySummary').innerHTML = catSummaryHtml;
+
+            updateChart(monthlyIncome, monthlyExpense, monthlyDiff);
+        }
+
+        // --- 차트 (Chart.js) ---
+        function initChart() {
+            const ctx = document.getElementById('financeChart').getContext('2d');
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months.map(m => m + '월'),
+                    datasets: [
+                        { label: '총수입', data: [], borderColor: '#3498db', backgroundColor: '#3498db', tension: 0.3 },
+                        { label: '총지출', data: [], borderColor: '#e74c3c', backgroundColor: '#e74c3c', tension: 0.3 },
+                        { label: '차액', data: [], borderColor: '#2ecc71', backgroundColor: '#2ecc71', borderDash: [5, 5], tension: 0.3 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { tooltip: { callbacks: { label: function(context) { return formatNum(context.raw) + '원'; } } } },
+                    scales: { y: { ticks: { callback: function(value) { return formatNum(value); } } } }
+                }
+            });
+        }
+
+        function updateChart(income, expense, diff) {
+            if (myChart) {
+                myChart.data.datasets[0].data = income;
+                myChart.data.datasets[1].data = expense;
+                myChart.data.datasets[2].data = diff;
+                myChart.update();
+            }
+        }
+
+        // --- 유틸리티 및 버튼 기능 ---
+        function formatNum(num) {
+            if (num === 0) return '0';
+            return Number(num).toLocaleString('ko-KR');
+        }
+
+        function resetData() {
+            if(confirm("정말 모든 데이터를 0으로 초기화하시겠습니까?\n(이 작업은 되돌릴 수 없습니다)")) {
+                localStorage.removeItem('familyLedger');
+                location.reload(); // 페이지 새로고침하여 완전 초기화
+            }
+        }
+
+        function loadSampleData() {
+            if(confirm("현재 입력된 데이터가 덮어쓰기 됩니다. 샘플 데이터를 불러오시겠습니까?")) {
+                appData.incomeCategories.forEach(cat => {
+                    appData.income[cat] = Array(12).fill(0).map(() => cat.includes('월급') ? 3000000 : Math.floor(Math.random()*5)*100000);
+                });
+                appData.expenseCategories.forEach(cat => {
+                    appData.expense[cat] = Array(12).fill(0).map(() => Math.floor(Math.random()*50 + 5)*10000);
+                });
+                saveData();
+                renderTables();
+                updateCalculations();
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
